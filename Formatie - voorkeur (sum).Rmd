@@ -1,0 +1,104 @@
+---
+title: "Formatie"
+author: "Bram van Smoorenburg"
+date: "2 November 2017"
+output: html_document
+---
+
+basis
+```{r}
+meerderheid.parl=28 #76
+meerderheid.sen=1 #38
+```
+
+data lezen
+```{r}
+library(xlsx)
+verk=as.matrix(read.xlsx("./verk.xlsx",1))
+voork=verk[-c(1,2),]
+verk=verk[c(1,2),]
+if (any(colnames(verk)=="X50.")) {
+  colnames(verk)[which(colnames(verk)=="X50.")]="50+"
+}
+tmp=colnames(verk)
+class(verk)="numeric"
+colnames(voork)=NULL
+rownames(voork)=voork[,1]
+voork=voork[,-1]
+totpart=ncol(verk)
+```
+
+driehoek van pascal
+```{r}
+pascal <- 1
+for (a in 1:totpart-1) { pascal <- c(0, pascal) + c(pascal, 0)}
+pascal=pascal[-c(1,2,length(pascal))]
+print(pascal)
+totkab=sum(pascal)
+pascu=cumsum(pascal)
+```
+
+bestaat het kabinet al?
+```{r}
+bestaatal=function(l,vec=tmp) {
+  if (all(l%in%vec)) {
+    return(TRUE)
+  } else {
+    return(FALSE)
+  }
+}
+```
+
+lijst van alle mogelijke kabinetten
+```{r}
+kabinetn=c(1,1)
+kabinetten=list()
+combmax=(totpart-1):totpart
+for (i in 1:totkab) {
+  if (any((pascu+1)==i)) {
+    tmp=which((pascu+1)==i)+2
+    kabinetn=1:tmp
+    combmax=(totpart-tmp+1):totpart
+  } else if (any(kabinetn==combmax)) {
+    tmp=which(kabinetn==combmax)[1]
+    kabinetn[tmp-1]=kabinetn[tmp-1]+1
+    tmpto=kabinetn[tmp-1]+length(kabinetn)-tmp+1
+    kabinetn[tmp:length(kabinetn)]=(kabinetn[tmp-1]+1):tmpto
+  } else {
+    kabinetn[length(kabinetn)]=kabinetn[length(kabinetn)]+1
+  }
+  if (sum(verk[1,kabinetn])<meerderheid.parl|sum(verk[2,kabinetn])<meerderheid.sen) {
+    next
+  }
+  tmp=colnames(verk)[kabinetn]
+  tmpto=sapply(kabinetten,bestaatal)
+  if (any(tmpto)) {
+    next
+  }
+  kabinetten[[length(kabinetten)+1]]=tmp
+}
+```
+
+nested functies
+```{r}
+keuring=function(p,vec=tmp,mat=voork){
+  anderen=vec[which(vec!=p)]
+  tmpto=match(anderen,mat[p,])
+  return(sum(tmpto))
+}
+kabkeuring=function(l){
+  tmp<<-l
+  result=sapply(tmp,keuring)
+  return(result)
+}
+```
+
+de keuring
+```{r}
+score=lapply(kabinetten,kabkeuring)
+score2=sapply(score,sum)
+score2=order(score2)
+kabrang=kabinetten[score2]
+score=score[score2]
+kabrang[1:5]
+```

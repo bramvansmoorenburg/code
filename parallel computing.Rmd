@@ -1,0 +1,97 @@
+---
+title: "parallel computing"
+author: "Bram van Smoorenburg"
+date: "1 September 2018"
+output: html_document
+---
+
+http://gforge.se/2015/02/how-to-go-parallel-in-r-basics-tips/
+
+```{r}
+library(parallel)
+(max=detectCores()-1)
+ncores=6
+```
+
+```{r}
+x=1:1e7
+```
+
+```{r}
+starttime=Sys.time()
+out=lapply(x,log)
+Sys.time()-starttime
+```
+
+```{r}
+clu=makeCluster(ncores)
+starttime=Sys.time()
+out=parLapply(clu,x,log)
+Sys.time()-starttime
+stopCluster(clu)
+```
+
+```{r}
+splitvec=function(vec,n) {
+  if (length(vec)<n) {
+    stop("vector not long enough, length:",length(vec))
+  }
+  out=round(seq(0,length(vec),length.out = n+1))
+  return(lapply(2:(n+1),function(y){vec[(out[y-1]+1):out[y]]}))
+}
+```
+
+```{r}
+splitmat=function(mat,n,byrow=TRUE) {
+  if (byrow) {
+    if (n>nrow(mat)) {
+      stop("more splits than rows, nrow=",nrow(mat))
+    }
+    outrows=round(seq(0,nrow(mat),length.out = n+1))
+    return(lapply(2:(n+1),function(y){mat[(outrows[y-1]+1):outrows[y],,drop=FALSE]}))
+  } else {
+    if (n>ncol(mat)) {
+      stop("more splits than columns, ncol=",ncol(mnat))
+    }
+    outcols=round(seq(0,ncol(mat),length.out = n+1))
+    return(lapply(2:(n+1),function(y){mat[,(outcols[y-1]+1):outcols[y],drop=FALSE]}))
+  }
+}
+```
+
+
+```{r}
+clu=makeCluster(ncores)
+starttime=Sys.time()
+xspl=splitvec(x,ncores)
+out=unlist(parLapply(clu,xspl,log))
+Sys.time()-starttime
+stopCluster(clu)
+```
+
+load-balancing task
+```{r}
+xmat=matrix(floor(runif(15*3,1,4)),nrow=15)
+```
+
+```{r}
+starttime=Sys.time()
+apply(xmat,c(1,2),Sys.sleep)
+Sys.time()-starttime
+```
+
+```{r}
+clu=makeCluster(ncores)
+starttime=Sys.time()
+parApply(clu,xmat,c(1,2),Sys.sleep)
+Sys.time()-starttime
+stopCluster(clu)
+```
+
+```{r}
+clu=makeCluster(ncores)
+starttime=Sys.time()
+parSapplyLB(clu,1:nrow(xmat),function(y,xmat=xmat){lapply(xmat[y,],Sys.sleep)},xmat=xmat)
+Sys.time()-starttime
+stopCluster(clu)
+```

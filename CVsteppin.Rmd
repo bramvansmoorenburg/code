@@ -1,0 +1,126 @@
+---
+title: "CVsteppin"
+author: "Bram van Smoorenburg"
+date: "6 January 2019"
+output: html_document
+---
+
+```{r}
+CVsteppin=function(dataset,response=colnames(dataset)[1],tot.vars=1:10,k.begin=102,kstep.marg=20,int.terms=5,kstep.big=kstep.marg,CVs=1e2,nfolds=2) {
+  marginalmodel=lm(as.formula(paste(response,"~.")),data = dataset)
+  interactmodel=lm(as.formula(paste(response,"~.*.")),data = dataset)
+  Sys.sleep(5)
+  
+  crossvalidate=function(model,samplenr) {
+  mcall=as.list(model$call)
+  dat=dataset
+  folds=rep(floor(nrow(dat)/nfolds),nfolds)
+  if (sum(folds)!=nrow(dat)) {
+    folds[1:(nrow(dat)%%nfolds)]=folds[1]+1
+  }
+  folds=cumsum(folds)
+  folds=rbind(c(1,folds[-length(folds)]+1),folds)
+  mcall[["data"]]=as.symbol("train")
+  rowsample=rowsamples[,samplenr]
+  out=sapply(1:nfolds,function(x){
+    test=dat[rowsample[folds[1,x]:folds[2,x]],]
+    train=dat[rowsample[-c(folds[1,x]:folds[2,x])],]
+    model2=do.call(as.character(mcall[[1]]),mcall[-1])
+    prediction=predict(model2,test)
+    sqloss=(prediction-test[,response])^2
+    return(sum(sqloss))
+  })
+  return(sum(out))
+}
+  
+  cat("Commencing forward step","\n")
+  step.again=TRUE
+  k.current=k.begin
+  while (step.again) {
+    bigmodel=step(marginalmodel,scope = list(lower=marginalmodel,upper=interactmodel),direction = "forward",steps = int.terms,k=k.current,trace = 0)
+    if (length(labels(terms(bigmodel)))==length(labels(terms(marginalmodel)))+int.terms) {
+      step.again=FALSE
+    } else {
+      k.current=k.current-kstep.marg
+    }
+  }
+  
+  models=rep(list(0),length(tot.vars))
+  names(models)=paste0("model",tot.vars)
+  ks=matrix(k.current,nrow = 2,ncol = length(tot.vars))
+  rowsamples=replicate(CVs,sample(nrow(dataset)))
+  cvresults=matrix(0,nrow = 2,ncol=length(tot.vars))
+  k.marg=k.current
+  for (i in 1:length(tot.vars)) {
+    cat("Running model ",tot.vars[i],", ",sep = "")
+    if (tot.vars[i]==1) {
+      nullmodel=lm(as.formula(paste(response,"~1")),data = dataset)
+      tmp=which.max(add1(nullmodel,marginalmodel)[,2])
+      modterm=labels(terms(marginalmodel))[tmp-1]
+      models[[i]]=lm(as.formula(paste(response,"~",modterm)),data=dataset)
+      models[[i]]=update(models[[i]],formula. = as.formula(paste0(response,"~",modterm)))
+      ks[2,i]=NA
+      cv=sapply(1:CVs,function(x){crossvalidate(models[[i]],samplenr = x)})
+      cvresults[,i]=c(mean(cv),sd(cv))
+      cat("\n")
+    } else if (tot.vars[i]==2) {
+      step.again=TRUE
+      step.size=length(labels(terms(marginalmodel)))-2
+      k.current=k.marg
+      model=marginalmodel
+      while (step.again) {
+        model=step(model,direction = "backward",steps = step.size,k=k.current,trace=0)
+        if (length(labels(terms(model)))==tot.vars[i]) {
+          step.again=FALSE
+          } else {
+          k.current=k.current+kstep.big
+          step.size=length(labels(terms(model)))-2
+        }
+      }
+      models[[i]]=model
+      ks[2,i]=k.current
+      cv=sapply(1:CVs,function(x){crossvalidate(models[[i]],samplenr = x)})
+      cvresults[,i]=c(mean(cv),sd(cv))
+      cat("\n")
+    } else {
+      step.again=TRUE
+      step.size=length(labels(terms(bigmodel)))-tot.vars[i]
+      model=bigmodel
+      k.current=k.marg
+      while (step.again) {
+        model=step(model,direction = "backward",steps = step.size,k=k.current,trace=0)
+        if (length(labels(terms(model)))==tot.vars[i]) {
+          step.again=FALSE
+          } else {
+          step.size=length(labels(terms(model)))-tot.vars[i]
+          k.current=k.current+kstep.big
+        }
+      }
+      models[[i]]=model
+      cat("model initialized","\n")
+      ks[2,i]=k.current
+      cv=sapply(1:CVs,function(x){crossvalidate(models[[i]],samplenr = x)})
+      cvresults[,i]=c(mean(cv),sd(cv))
+    }
+  }
+  
+  invisible(gc())
+  return(list(models=models,k=ks,cv=cvresults))
+}
+```
+
+```{r}
+library(faraway)
+data("diabetes")
+data=diabetes
+rownames(data)=data[,1]
+data=na.omit(data[,-c(1,15,16)])
+```
+
+```{r}
+diabcv=CVsteppin(data,"weight",k.begin = 16,kstep.marg = 2)
+```
+
+```{r}
+diabcv[2:3]
+```

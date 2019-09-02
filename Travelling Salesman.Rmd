@@ -1,0 +1,160 @@
+---
+title: "Travelling Salesman"
+author: "Bram van Smoorenburg"
+date: "5 January 2018"
+output: html_document
+---
+
+```{r}
+library(ggplot2)
+library(combinat)
+```
+
+cities
+```{r}
+c=8
+```
+
+creating points
+```{r}
+sampl=matrix(sample(1000,2*c,replace = TRUE),c,2)
+```
+
+creating distance matrix
+```{r}
+distance=as.matrix(dist(sampl))
+distance[which(col(distance)>=row(distance))]=NA
+distance=distance+abs(rnorm(c^2,0,0.05))*distance
+distto=distance
+distto[upper.tri(distto)]=t(distance)[upper.tri(distance)]
+```
+
+data frame
+```{r}
+samp=as.data.frame(sampl)
+```
+
+plot
+```{r}
+p=ggplot(samp,aes(V1,V2))+
+  labs(x="x",y="y")+
+  lims(x=c(0,1000),y=c(0,1000))+
+  geom_text(aes(label=rownames(samp)))
+p
+```
+
+line matrix
+```{r}
+fork=matrix(0,c-1,2)
+light=logical(c)
+```
+
+initialise
+```{r}
+x=which(distance==min(distance,na.rm = TRUE),arr.ind = TRUE)
+fork[1,1]=x[1]
+fork[1,2]=x[2]
+light[x]=TRUE
+rm(x)
+```
+
+loop
+```{r}
+for (i in 2:(c-1)) {
+  tmp=which(light!=TRUE)
+  tmpto=distto[-tmp,tmp][which(distto[-tmp,tmp]==min(distto[-tmp,tmp],na.rm = TRUE))]
+  tmptr=which(distance==tmpto,arr.ind = TRUE)
+  fork[i,1]=tmptr[1]
+  fork[i,2]=tmptr[2]
+  light[tmptr]=TRUE
+}
+rm(i,tmp,tmpto,tmptr,light)
+```
+
+matrix distance function
+```{r}
+matdist=function(x,d=distto) {
+  return(d[x[1],x[2]])
+}
+(forklength=sum(apply(fork,1,matdist)))
+```
+
+adding lines to plot
+```{r}
+p2=p
+for (i in 1:nrow(fork)) {
+  x=sampl[fork[i,1],1]
+  y=sampl[fork[i,1],2]
+  xend=sampl[fork[i,2],1]
+  yend=sampl[fork[i,2],2]
+  df=data.frame(x=x,y=y,xend=xend,yend=yend)
+  p2=p2+geom_segment(aes(x=x,y=y,xend=xend,yend=yend),data = df)
+}
+rm(i,x,y,xend,yend,df)
+p2
+```
+
+#non-forking path
+
+permutation apply function
+```{r}
+mindist=Inf
+vecdistperm=function(x,d=distto) {
+  tmp=rep(x,each=2)[-c(1,2*length(x))]
+  tmp=matrix(tmp,nrow = 2)
+  result=sum(apply(tmp,2,matdist))
+  if (result<mindist) {
+    mindist<<-result
+    bestmat<<-t(tmp)
+  }
+  return(result)
+}
+x=permn(1:c,vecdistperm)
+```
+
+making plot
+```{r}
+p3=p
+for (i in 1:nrow(bestmat)) {
+  x=sampl[bestmat[i,1],1]
+  y=sampl[bestmat[i,1],2]
+  xend=sampl[bestmat[i,2],1]
+  yend=sampl[bestmat[i,2],2]
+  df=data.frame(x=x,y=y,xend=xend,yend=yend)
+  p3=p3+geom_segment(aes(x=x,y=y,xend=xend,yend=yend),data = df)
+}
+rm(i,x,y,xend,yend,df)
+p3
+```
+
+#same end point as start
+```{r}
+mindistss=Inf
+vecdistpermss=function(x,d=distto) {
+  tmp=c(x,x[1])
+  tmp=rep(tmp,each=2)[-c(1,2*length(tmp))]
+  tmp=matrix(tmp,nrow = 2)
+  result=sum(apply(tmp,2,matdist))
+  if (result<mindistss) {
+    mindistss<<-result
+    bestmatss<<-t(tmp)
+  }
+  return(result)
+}
+x=permn(1:c,vecdistpermss)
+```
+
+making plot
+```{r}
+p4=p
+for (i in 1:nrow(bestmatss)) {
+  x=sampl[bestmatss[i,1],1]
+  y=sampl[bestmatss[i,1],2]
+  xend=sampl[bestmatss[i,2],1]
+  yend=sampl[bestmatss[i,2],2]
+  df=data.frame(x=x,y=y,xend=xend,yend=yend)
+  p4=p4+geom_segment(aes(x=x,y=y,xend=xend,yend=yend),data = df)
+}
+rm(i,x,y,xend,yend,df)
+p4
+```

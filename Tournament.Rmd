@@ -1,0 +1,439 @@
+---
+title: "Tournament"
+author: "Bram van Smoorenburg"
+date: "4 February 2018"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r}
+part=64
+win=5
+set.seed(20181108)
+```
+
+```{r}
+game=function(a,w=win) {
+  on=trunc(a)
+  to=round((a-trunc(a))*1000)
+  m1=skillm[on]
+  sd1=skillsd[on]
+  m2=skillm[to]
+  sd2=skillsd[to]
+  a=as.numeric(rnorm(2*w-1,m1,sd1)>rnorm(2*w-1,m2,sd2))
+  b=cumsum(a)
+  c=cumsum(1-a)
+  tmp=min(c(which(b==w)[1],which(c==w)[1]),na.rm = TRUE)
+  tmpto=b[tmp]+c[tmp]/100
+  return(tmpto)
+}
+```
+
+jitter loss
+```{r}
+n=1e3
+loss=numeric(n)
+for (i in 1:n) {
+  z=sort(rnorm(100),decreasing = TRUE)
+  y=jitter(z,factor = 1e-5)
+  x=sum(abs(101-rank(y)-1:100))/2
+  loss[i]=x
+}
+mean(loss)
+```
+
+#completely random order
+```{r}
+n=1e5
+loss=numeric(n)
+for (i in 1:n) {
+  sampl=sample(1:part)
+  loss[i]=sum(abs(sampl-1:part))/2
+}
+mean(loss)
+sd(loss)
+```
+
+```{r}
+hist(loss)
+```
+
+#single or pooled all v all
+```{r}
+groupsize=12
+tmp=part%/%groupsize
+  tmpto=part%%groupsize
+  c=rep.int(groupsize,tmp)
+  c=c+(floor(tmpto/tmp))
+  tmpto=part-sum(c)
+  c[0:tmpto]=c[0:tmpto]+1
+  b=cumsum(c)
+sum(choose(c,2))
+n=1e3
+```
+
+
+##net points
+```{r}
+loss=numeric(n)
+for (a in 1:n) {
+  skillm=sort(rnorm(part,1000,100),decreasing = TRUE)
+skillsd=abs(rnorm(part,100,100))
+if (groupsize<part) {
+  tmptr=sample(1:part)
+  x=combn(tmptr[1:b[1]],2)
+  grouping=numeric(part)
+  grouping[tmptr[1:b[1]]]=1
+  for (i in 2:length(b)) {
+    x=cbind(x,combn(tmptr[(b[i-1]+1):b[i]],2))
+    grouping[tmptr[(b[i-1]+1):b[i]]]=i
+  }
+} else {
+  x=combn(part,2)
+}
+games=x[1,]+x[2,]/1000
+score=sapply(games,game)
+on=trunc(score)
+to=(score-trunc(score))*100
+netpoint=numeric(part)
+point=numeric(part)
+for (i in 1:part) {
+  tmp=which(x[1,]==i)
+  tmpto=which(x[2,]==i)
+  netpoint[i]=(sum(on[tmp],na.rm = TRUE)-sum(to[tmp],na.rm = TRUE)+sum(to[tmpto],na.rm = TRUE)-sum(on[tmpto],na.rm = TRUE))/c[grouping[i]]
+  point[i]=(sum(on[tmp],na.rm = TRUE)+sum(to[tmpto],na.rm = TRUE))/c[grouping[i]]
+}
+point=jitter(point,1e-5)
+ranking=order(netpoint,point,decreasing = TRUE)
+loss[a]=sum(abs(ranking-1:part))/2
+}
+mean(loss)
+sd(loss)
+```
+
+```{r}
+hist(loss)
+```
+
+##KNAS style
+```{r}
+loss=numeric(n)
+for (a in 1:n) {
+  skillm=sort(rnorm(part,1000,100),decreasing = TRUE)
+skillsd=abs(rnorm(part,100,100))
+if (groupsize<part) {
+  tmptr=sample(1:part)
+  x=combn(tmptr[1:b[1]],2)
+  grouping=numeric(part)
+  grouping[tmptr[1:b[1]]]=1
+  for (i in 2:length(b)) {
+    x=cbind(x,combn(tmptr[(b[i-1]+1):b[i]],2))
+    grouping[tmptr[(b[i-1]+1):b[i]]]=i
+  }
+} else {
+  x=combn(part,2)
+}
+games=x[1,]+x[2,]/1000
+score=sapply(games,game)
+on=trunc(score)
+to=(score-trunc(score))*100
+V=numeric(part)
+netpoint=numeric(part)
+point=numeric(part)
+for (i in 1:part) {
+  tmp=which(x[1,]==i)
+  tmpto=which(x[2,]==i)
+  V[i]=(length(which(on[tmp]==win))+length(which(round(to[tmpto])==win)))/c[grouping[i]]
+  netpoint[i]=sum(on[tmp],na.rm = TRUE)-sum(to[tmp],na.rm = TRUE)+sum(to[tmpto],na.rm = TRUE)-sum(on[tmpto],na.rm = TRUE)
+  point[i]=sum(on[tmp],na.rm = TRUE)+sum(to[tmpto],na.rm = TRUE)
+}
+point=jitter(point,1e-5)
+ranking=order(V,netpoint,point,decreasing = TRUE)
+loss[a]=sum(abs(ranking-1:part))/2
+}
+mean(loss)
+sd(loss)
+```
+
+```{r}
+hist(loss)
+```
+
+#elo method
+```{r}
+games=388
+```
+
+##random matching
+```{r}
+loss=numeric(n)
+x=combn(part,2)
+Ffactor=100
+for (a in 1:n) {
+  elo=rep(1450,part)
+  skillm=sort(rnorm(part,1000,100),decreasing = TRUE)
+skillsd=abs(rnorm(part,100,100))
+for (i in 1:games) {
+  tmp=x[,sample(choose(part,2),1)]
+ex=1/(1+10^((elo[tmp[2]]-elo[tmp[1]])/Ffactor))
+Kscore=ifelse(min(elo[tmp[2]],elo[tmp[1]])>2400,16,ifelse(min(elo[tmp[2]],elo[tmp[1]])>2100,24,32))
+result=game(c(tmp[1]+tmp[2]/1000))
+score=trunc(result)/(trunc(result)+(result-trunc(result))*100)
+elo[tmp[1]]=elo[tmp[1]]+Kscore*(score-ex)
+elo[tmp[2]]=elo[tmp[2]]+Kscore*((1-score)-(1-ex))
+}
+loss[a]=sum(abs(part+1-rank(elo,ties.method = "random")-1:part))/2
+}
+mean(loss)
+sd(loss)
+```
+part 50 win 5 games 1225 F 600 n 1e3
+[1] 64.724
+[1] 9.014493
+
+part 50 win 5 games 288 F 100 n 1e3
+[1] 112.282
+[1] 15.69066
+
+part 50 win 10 games 288 F 100 n 1e3
+[1] 95.318
+[1] 12.76071
+
+part 50 win 5 games 1 n 1e3
+[1] 407.401
+[1] 37.24349
+
+part 50 win 15 games 216 F 100 n 1e3
+[1] 101.917
+[1] 13.02466
+
+
+```{r}
+hist(loss)
+```
+
+##elo matching
+```{r}
+loss=numeric(n)
+turn=ceiling(games/part)
+x=as.vector(replicate(turn,sample(1:part)))[1:games]
+Ffactor=400
+for (a in 1:n) {
+  elo=rep(1450,part)
+  skillm=sort(rnorm(part,1000,100),decreasing = TRUE)
+skillsd=abs(rnorm(part,100,100))
+for (i in 1:games) {
+tmp=x[i]
+tmpto=1:part
+tmpto[tmp]=NA
+tmpto=abs(elo[tmpto]-elo[tmp])
+tmp[2]=which(rank(tmpto,ties.method = "random")==1)
+ex=1/(1+10^((elo[tmp[2]]-elo[tmp[1]])/Ffactor))
+Kscore=ifelse(min(elo[tmp[2]],elo[tmp[1]])>2400,16,ifelse(min(elo[tmp[2]],elo[tmp[1]])>2100,24,32))
+result=game(c(tmp[1]+tmp[2]/1000))
+score=trunc(result)/(trunc(result)+(result-trunc(result))*100)
+elo[tmp[1]]=elo[tmp[1]]+Kscore*(score-ex)
+elo[tmp[2]]=elo[tmp[2]]+Kscore*((1-score)-(1-ex))
+}
+loss[a]=sum(abs(part+1-rank(elo,ties.method = "random")-1:part))/2
+}
+mean(loss)
+sd(loss)
+```
+
+```{r}
+hist(loss)
+```
+
+#elimination
+```{r}
+elimination=function(x) {
+  tmp=1
+  for (k in 1:ceiling(log(x,2))) {
+    tmp=rep(tmp,each=2)
+    tmpto=2^k+1-tmp
+    tmptr=tmp
+    tmptr[seq(2,length(tmptr),2)]=tmptr[seq(2,length(tmptr),2)]+1
+    tmptr=tmptr%%2==0
+    tmp=tmp*tmptr+tmpto*!tmptr
+  }
+  tmp[which(tmp>x)]=NA
+  return(rev(tmp))
+}
+```
+
+```{r}
+tours=2
+win.norm=win
+win.elim=win
+rounds=ceiling(log(part,2))
+"total games:"
+((2^rounds-2*(2^rounds-part))/2)*rounds*tours
+```
+
+```{r}
+n=1e3
+loss=numeric(n)
+win=win.elim
+for (a in 1:n) {
+  skillm=sort(rnorm(part,1000,100),decreasing = TRUE)
+skillsd=abs(rnorm(part,100,100))
+tour=sample(1:part)
+for (e in 1:tours) {
+tour=tour[elimination(part)]
+x=array(tour)
+z=x[seq(1,length(x),by=2)]+x[seq(2,length(x),by=2)]/1000
+y=suppressWarnings(sapply(z,game))
+on=trunc(y)
+to=round((y-trunc(y))*100)
+y=x
+y[seq(1,length(y),2)]=on
+y[seq(2,length(y),2)]=to
+z=y==15
+z[which(is.na(z))]=TRUE
+z[which(is.na(x))]=FALSE
+x=rbind(x[z],x[!z])
+for (i in 2:rounds) {
+  z=as.matrix(x[,seq(1,ncol(x),by=2)]+x[,seq(2,ncol(x),by=2)]/1000)
+y=suppressWarnings(apply(z,c(1,2),game))
+on=trunc(y)
+to=round((y-trunc(y))*100)
+y=x
+y[,seq(1,ncol(y),2)]=on
+y[,seq(2,ncol(y),2)]=to
+z=y==15
+z[which(is.na(z))]=TRUE
+z[which(is.na(x))]=FALSE
+tmp=which(is.na(t(x)[seq(1,ncol(x),2),])&is.na(t(x)[seq(1,ncol(x),2)+1,]))
+z=t(z)
+z[seq(1,ncol(x),2),][tmp]=TRUE
+z=t(z)
+y=matrix(0,nrow = nrow(x)*2,ncol = ncol(x)/2)
+y=t(y)
+y[,seq(1,ncol(y),2)]=t(x)[t(z)]
+y[,seq(2,ncol(y),2)]=t(x)[t(!z)]
+x=t(y)
+}
+tour=as.vector(x)[1:part]
+}
+loss[a]=sum(abs(tour-1:part))/2
+}
+win=win.norm
+mean(loss)
+sd(loss)
+```
+
+part 50 win 15 tours 2 games 216 n 1e3
+[1] 97.512
+[1] 16.35565
+
+part 64 win 15 tours 2 games 384 n 1e3
+[1] 151.448
+[1] 23.05048
+
+```{r}
+hist(loss)
+```
+
+#KNAS tournament
+```{r}
+n=1e3
+part=64
+groupsize=6
+tmp=part%/%groupsize
+  tmpto=part%%groupsize
+  c=rep.int(groupsize,tmp)
+  c=c+(floor(tmpto/tmp))
+  tmpto=part-sum(c)
+  c[0:tmpto]=c[0:tmpto]+1
+  b=cumsum(c)
+win.norm=5
+win.elim=15
+tours=1
+rounds=ceiling(log(part,2))
+"total games:"
+sum(choose(c,2))+((2^rounds-2*(2^rounds-part))/2)*rounds*tours
+```
+
+```{r}
+loss=numeric(n)
+for (a in 1:n) {
+  win=win.norm
+  skillm=sort(rnorm(part,1000,100),decreasing = TRUE)
+skillsd=abs(rnorm(part,100,100))
+if (groupsize<part) {
+  tmptr=sample(1:part)
+  x=combn(tmptr[1:b[1]],2)
+  grouping=numeric(part)
+  grouping[tmptr[1:b[1]]]=1
+  for (i in 2:length(b)) {
+    x=cbind(x,combn(tmptr[(b[i-1]+1):b[i]],2))
+    grouping[tmptr[(b[i-1]+1):b[i]]]=i
+  }
+} else {
+  x=combn(part,2)
+}
+games=x[1,]+x[2,]/1000
+score=sapply(games,game)
+on=trunc(score)
+to=(score-trunc(score))*100
+V=numeric(part)
+netpoint=numeric(part)
+point=numeric(part)
+for (i in 1:part) {
+  tmp=which(x[1,]==i)
+  tmpto=which(x[2,]==i)
+  V[i]=(length(which(on[tmp]==win))+length(which(round(to[tmpto])==win)))/c[grouping[i]]
+  netpoint[i]=sum(on[tmp],na.rm = TRUE)-sum(to[tmp],na.rm = TRUE)+sum(to[tmpto],na.rm = TRUE)-sum(on[tmpto],na.rm = TRUE)
+  point[i]=sum(on[tmp],na.rm = TRUE)+sum(to[tmpto],na.rm = TRUE)
+}
+point=jitter(point,1e-5)
+ranking=order(V,netpoint,point,decreasing = TRUE)
+win=win.elim
+for (e in 1:tours) {
+tour=ranking[elimination(part)]
+x=array(tour)
+z=x[seq(1,length(x),by=2)]+x[seq(2,length(x),by=2)]/1000
+y=suppressWarnings(sapply(z,game))
+on=trunc(y)
+to=round((y-trunc(y))*100)
+y=x
+y[seq(1,length(y),2)]=on
+y[seq(2,length(y),2)]=to
+z=y==15
+z[which(is.na(z))]=TRUE
+z[which(is.na(x))]=FALSE
+x=rbind(x[z],x[!z])
+for (i in 2:rounds) {
+  z=as.matrix(x[,seq(1,ncol(x),by=2)]+x[,seq(2,ncol(x),by=2)]/1000)
+y=suppressWarnings(apply(z,c(1,2),game))
+on=trunc(y)
+to=round((y-trunc(y))*100)
+y=x
+y[,seq(1,ncol(y),2)]=on
+y[,seq(2,ncol(y),2)]=to
+z=y==15
+z[which(is.na(z))]=TRUE
+z[which(is.na(x))]=FALSE
+tmp=which(is.na(t(x)[seq(1,ncol(x),2),])&is.na(t(x)[seq(1,ncol(x),2)+1,]))
+z=t(z)
+z[seq(1,ncol(x),2),][tmp]=TRUE
+z=t(z)
+y=matrix(0,nrow = nrow(x)*2,ncol = ncol(x)/2)
+y=t(y)
+y[,seq(1,ncol(y),2)]=t(x)[t(z)]
+y[,seq(2,ncol(y),2)]=t(x)[t(!z)]
+x=t(y)
+}
+tour=as.vector(x)[1:part]
+}
+loss[a]=sum(abs(tour-1:part))/2
+}
+mean(loss)
+sd(loss)
+```
+
+```{r}
+hist(loss)
+```

@@ -1,0 +1,84 @@
+---
+title: "Risk Map"
+author: "Bram van Smoorenburg"
+date: "3 May 2018"
+output: html_document
+---
+
+libraries
+```{r}
+library(smacof)
+```
+
+data
+```{r}
+map=unlist(read.table("./map.txt",stringsAsFactors = FALSE))
+names(map)=NULL
+map=strsplit(map,":")
+mapvec=sapply(map,function(x){x[1]})
+map=lapply(map,function(x){x[-1]})
+map=lapply(map,function(x){unlist(strsplit(x,","))})
+```
+
+distance matrix
+```{r}
+distan=matrix(0,length(mapvec),length(mapvec))
+rownames(distan)=mapvec
+colnames(distan)=mapvec
+```
+
+initialize
+```{r}
+dist1=function(x) {
+  index=mapvec[x]
+  distan[index,map[[x]]]<<-1
+}
+invisible(lapply(1:length(mapvec),dist1))
+```
+
+next distance
+```{r}
+nextdist=function(x,val=value,mat=distan) {
+  tmp=which(x==val-1)
+  tmpto=unique(unlist(lapply(tmp,function(x){which(mat[x,]==val-1)})))
+  tmptr=numeric(length(x))
+  tmptr[tmpto]=val
+  tmpfo=x
+  tmpfo[x==0]=tmptr[x==0]
+  return(tmpfo)
+}
+```
+
+rest of distance matrix
+```{r}
+numzero=length(which(distan==0))
+value=1
+while(numzero>0) {
+  value=value+1
+  distan=apply(distan,1,nextdist)
+  numzero=length(which(distan==0))
+}
+diag(distan)=0
+```
+
+scaling
+```{r}
+configu=mds(distan)
+plot(configu)
+```
+
+mean distance
+```{r}
+sort(rowMeans(distan),decreasing = TRUE)
+```
+
+3d plot
+```{r}
+configu3=mds(distan,ndim = 3)$conf
+configu3m=configu3
+configu3m[,1]=-configu3m[,1]
+library(scatterplot3d)
+par(mfrow=c(1,2))
+scatterplot3d(configu3,pch = rownames(configu3),highlight.3d = TRUE)
+scatterplot3d(configu3m,pch = rownames(configu3m),highlight.3d = TRUE)
+```

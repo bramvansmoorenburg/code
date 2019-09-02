@@ -1,0 +1,19 @@
+---
+title: "Installing packages"
+author: "Bram van Smoorenburg"
+date: "15 August 2018"
+output: html_document
+---
+
+```{r}
+name="Installed Packages 2018-07-29"
+pkgs=read.csv(paste0(getwd(),"/",name,".csv"))
+```
+
+```{r}
+size=nrow(pkgs)
+for (i in 1:size) {
+  cat("\n","Progress: ",i,"/",size,", ",as.character(pkgs[i,1]),"\n",sep="")
+  install.packages(as.character(pkgs[i,1]))
+}
+```

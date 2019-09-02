@@ -1,0 +1,16 @@
+---
+title: "Installed packages"
+author: "Bram van Smoorenburg"
+date: "9 June 2018"
+output: html_document
+---
+
+```{r}
+pkgs=installed.packages()
+date=as.character(Sys.Date())
+```
+
+```{r}
+name=paste0("./Installed Packages ",date,".csv")
+write.csv(pkgs,name)
+```
