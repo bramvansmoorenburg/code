@@ -1,0 +1,481 @@
+---
+title: "spybots the nightfall incident"
+author: "Bram van Smoorenburg"
+date: "26 May 2020"
+output: html_document
+---
+
+```{r}
+library(shiny)
+library(png)
+library(xlsx)
+```
+
+```{r}
+progstats=read.xlsx("programs.xlsx",1)
+for (i in c(1,2,5,10,17,18)) {
+  progstats[,i]=as.character(progstats[,i])
+}
+imagtemp="./pictures/"
+progimags=lapply(progstats[,2],function(x){readPNG(paste0(imagtemp,x,".png"))})
+gridwidth=58
+gridheight=27
+holes=cbind(9:14,9)
+```
+
+test programs
+```{r}
+imageurl="./pictures/mandelbug.png"
+imageurl2="./pictures/sentinel.png"
+program=readPNG(imageurl)
+tailcol=program[1,1,]
+progtail=matrix(NA,nrow = 19,ncol=2)
+ms=5
+attype="attack"
+attack=c(2,2,0,0)
+attype2=NA
+attack2=c(NA,NA,NA,NA)
+program2=readPNG(imageurl2)
+tailcol2=program2[1,1,]
+progtail2=matrix(c(7,NA,8,NA),nrow=2,ncol=2)
+ms2=1
+attype21="attack"
+attack21=c(1,1,0,0)
+attype22=NA
+attack22=c(NA,NA,NA,NA)
+otherprogs=list(program,program2)
+otherlocs=list(c(6,6),c(6,8))
+othertailcols=list(tailcol,tailcol2)
+otherprogtails=list(progtail,progtail2)
+otherms=list(ms,ms2)
+otherattypes=list(attype,attype21)
+otherats=list(attack,attack21)
+otherattypes2=list(attype2,attype22)
+otherats2=list(attack2,attack22)
+```
+
+tail location function
+```{r}
+tailloc=function(vert,horiz,prevvert,prevhoriz,prevtail) {
+  if (!is.na(any(vert==prevtail[,1]&horiz==prevtail[,2]))&&any(vert==prevtail[,1]&horiz==prevtail[,2])) {
+    tmp=which(vert==prevtail[,1]&horiz==prevtail[,2])
+    newtail=rbind(c(prevvert,prevhoriz),prevtail[-tmp,])
+  } else {
+    newtail=rbind(c(prevvert,prevhoriz),prevtail[-nrow(prevtail),])
+  }
+  return(newtail)
+}
+```
+
+png creation function
+```{r}
+programloc=function(vert,horiz,tail=NULL,prog=program,tcol=tailcol,oprog=otherprogs,oloc=otherlocs,otail=otherprogtails,otcol=othertailcols,cmode=FALSE,msrem=ms,hole=holes,atmode=FALSE,atattr=attack,atvert=1,athoriz=1) {
+  out=array(0.8,dim=c(32*gridheight+5,32*gridwidth+5,3))
+  for (i in 0:gridheight) {
+    out[1:5+(i*32),,]=1
+  }
+  for (i in 0:gridwidth) {
+    out[,1:5+(i*32),]=1
+  }
+  
+  out[6:32+((vert-1)*32),6:32+((horiz-1)*32),]=prog #current program
+  if (!is.null(tail)&&nrow(tail)>0) {
+    for (i in 1:nrow(tail)) {
+      if (!is.na(tail[i,1])) {
+        out[6:32+((tail[i,1]-1)*32),6:32+((tail[i,2]-1)*32),]=c(rep(tcol[1],27^2),rep(tcol[2],27^2),rep(tcol[3],27^2))
+      }
+    }
+    connectail=na.omit(rbind(c(vert,horiz),tail))
+    if (nrow(connectail)>1) {
+      connectail2=connectail
+      connectail2[,1]=connectail2[,1]+1
+      vertlinks=apply(connectail,1,function(x){any(x[1]==connectail2[,1]&x[2]==connectail2[,2])})
+      if (any(vertlinks)) {
+        for (i in which(vertlinks)) {
+          out[1:5+((connectail[i,1]-1)*32),17:21+((connectail[i,2]-1)*32),]=c(rep(tcol[1],25),rep(tcol[2],25),rep(tcol[3],25))
+        }
+      }
+      connectail3=connectail
+      connectail3[,2]=connectail3[,2]+1
+      horizlinks=apply(connectail,1,function(x){any(x[1]==connectail3[,1]&x[2]==connectail3[,2])})
+      if (any(horizlinks)) {
+        for (i in which(horizlinks)) {
+          out[17:21+((connectail[i,1]-1)*32),1:5+((connectail[i,2]-1)*32),]=c(rep(tcol[1],25),rep(tcol[2],25),rep(tcol[3],25))
+        }
+      }
+    }
+  }
+  
+  for (i in 1:length(oloc)) { #all other programs
+    out[6:32+((oloc[[i]][1]-1)*32),6:32+((oloc[[i]][2]-1)*32),]=oprog[[i]]
+    if (nrow(otail[[i]])>0) {
+      for (j in 1:nrow(otail[[i]])) {
+        if (!is.na(otail[[i]][j,1])) {
+          out[6:32+((otail[[i]][j,1]-1)*32),6:32+((otail[[i]][j,2]-1)*32),]=c(rep(otcol[[i]][1],27^2),rep(otcol[[i]][2],27^2),rep(otcol[[i]][3],27^2))
+        }
+      }
+    }
+    connectail=na.omit(rbind(c(oloc[[i]][1],oloc[[i]][2]),otail[[i]]))
+    if (nrow(connectail)>1) {
+      connectail2=connectail
+      connectail2[,1]=connectail2[,1]+1
+      vertlinks=apply(connectail,1,function(x){any(x[1]==connectail2[,1]&x[2]==connectail2[,2])})
+      if (any(vertlinks)) {
+        for (j in which(vertlinks)) {
+          out[1:5+((connectail[j,1]-1)*32),17:21+((connectail[j,2]-1)*32),]=c(rep(otcol[[i]][1],25),rep(otcol[[i]][2],25),rep(otcol[[i]][3],25))
+        }
+      }
+      connectail3=connectail
+      connectail3[,2]=connectail3[,2]+1
+      horizlinks=apply(connectail,1,function(x){any(x[1]==connectail3[,1]&x[2]==connectail3[,2])})
+      if (any(horizlinks)) {
+        for (j in which(horizlinks)) {
+          out[17:21+((connectail[j,1]-1)*32),1:5+((connectail[j,2]-1)*32),]=c(rep(otcol[[i]][1],25),rep(otcol[[i]][2],25),rep(otcol[[i]][3],25))
+        }
+      }
+    }
+  }
+  
+  if (cmode) { #cursor
+    out[1:5+((vert-1)*32),1:37+((horiz-1)*32),]=0
+    out[1:5+(vert*32),1:37+((horiz-1)*32),]=0
+    out[1:37+((vert-1)*32),1:5+((horiz-1)*32),]=0
+    out[1:37+((vert-1)*32),1:5+(horiz*32),]=0
+  } else if (atmode) { #attack options
+    atran=atattr[2]
+    atoptions=matrix(c(vert,horiz),nrow=1,ncol=2)
+    for (i in 1:atran) {
+      atoptions=apply(atoptions,1,function(x){c(x,x[1]+1,x[2],x[1]-1,x[2],x[1],x[2]+1,x[1],x[2]-1)})
+      atoptions=matrix(atoptions,ncol=2,byrow=TRUE)
+      atoptions=unique(atoptions)
+    }
+    atblocked=apply(atoptions,1,function(x){any(x[1]==hole[,1]&x[2]==hole[,2])})
+    if (any(atblocked)) {
+      atoptions=atoptions[-which(atblocked),]
+    }
+    if (any(atoptions[,1]<1|atoptions[,2]<1,atoptions[,1]>gridheight|atoptions[,2]>gridwidth)) {
+      atoptions=atoptions[-which(atoptions[,1]<1|atoptions[,2]<1,atoptions[,1]>gridheight|atoptions[,2]>gridwidth),]
+    }
+    atoptions=atoptions[-which(vert==atoptions[,1]&horiz==atoptions[,2]),]
+    for (i in 1:nrow(atoptions)) {
+      out[9+((atoptions[i,1]-1)*32),9:29+((atoptions[i,2]-1)*32),]=c(rep(0.6,21),rep(0,2*21))
+      out[29+((atoptions[i,1]-1)*32),9:29+((atoptions[i,2]-1)*32),]=c(rep(0.6,21),rep(0,2*21))
+      out[9:29+((atoptions[i,1]-1)*32),9+((atoptions[i,2]-1)*32),]=c(rep(0.6,21),rep(0,2*21))
+      out[9:29+((atoptions[i,1]-1)*32),29+((atoptions[i,2]-1)*32),]=c(rep(0.6,21),rep(0,2*21))
+      out[13+((atoptions[i,1]-1)*32),13:25+((atoptions[i,2]-1)*32),]=c(rep(0.6,13),rep(0,2*13))
+      out[25+((atoptions[i,1]-1)*32),13:25+((atoptions[i,2]-1)*32),]=c(rep(0.6,13),rep(0,2*13))
+      out[13:25+((atoptions[i,1]-1)*32),13+((atoptions[i,2]-1)*32),]=c(rep(0.6,13),rep(0,2*13))
+      out[13:25+((atoptions[i,1]-1)*32),25+((atoptions[i,2]-1)*32),]=c(rep(0.6,13),rep(0,2*13))
+    }
+    out[1:5+((atvert-1)*32),1:37+((athoriz-1)*32),]=c(rep(0.6,5*37),rep(0,2*5*37))
+    out[1:5+(atvert*32),1:37+((athoriz-1)*32),]=c(rep(0.6,5*37),rep(0,2*5*37))
+    out[1:37+((atvert-1)*32),1:5+((athoriz-1)*32),]=c(rep(0.6,5*37),rep(0,2*5*37))
+    out[1:37+((atvert-1)*32),1:5+(athoriz*32),]=c(rep(0.6,5*37),rep(0,2*5*37))
+  } else if (msrem>0) { #movement options
+    blocked=na.omit(do.call(rbind,c(oloc,otail,list(hole))))
+    moveoptions=matrix(c(vert,horiz),nrow=1,ncol=2)
+    for (i in 1:msrem) {
+      moveoptions=apply(moveoptions,1,function(x){c(x,x[1]+1,x[2],x[1]-1,x[2],x[1],x[2]+1,x[1],x[2]-1)})
+      moveoptions=matrix(moveoptions,ncol=2,byrow=TRUE)
+      moveoptions=unique(moveoptions)
+      moveblocked=apply(moveoptions,1,function(x){any(x[1]==blocked[,1]&x[2]==blocked[,2])})
+      if (any(moveblocked)) {
+        moveoptions=moveoptions[-which(moveblocked),]
+      }
+      if (any(moveoptions[,1]<1|moveoptions[,2]<1,moveoptions[,1]>gridheight|moveoptions[,2]>gridwidth)) {
+        moveoptions=moveoptions[-which(moveoptions[,1]<1|moveoptions[,2]<1,moveoptions[,1]>gridheight|moveoptions[,2]>gridwidth),]
+      }
+    }
+    moveoptions=moveoptions[-which(vert==moveoptions[,1]&horiz==moveoptions[,2]),]
+    for (i in 1:nrow(moveoptions)) {
+      out[9+((moveoptions[i,1]-1)*32),9:29+((moveoptions[i,2]-1)*32),]=1
+      out[29+((moveoptions[i,1]-1)*32),9:29+((moveoptions[i,2]-1)*32),]=1
+      out[9:29+((moveoptions[i,1]-1)*32),9+((moveoptions[i,2]-1)*32),]=1
+      out[9:29+((moveoptions[i,1]-1)*32),29+((moveoptions[i,2]-1)*32),]=1
+      out[13+((moveoptions[i,1]-1)*32),13:25+((moveoptions[i,2]-1)*32),]=1
+      out[25+((moveoptions[i,1]-1)*32),13:25+((moveoptions[i,2]-1)*32),]=1
+      out[13:25+((moveoptions[i,1]-1)*32),13+((moveoptions[i,2]-1)*32),]=1
+      out[13:25+((moveoptions[i,1]-1)*32),25+((moveoptions[i,2]-1)*32),]=1
+    }
+  }
+  
+  for (i in 1:nrow(hole)) { #holes
+    out[6:32+((hole[i,1]-1)*32),6:32+((hole[i,2]-1)*32),]=1
+  }
+  
+  return(out)
+}
+```
+
+the app
+```{r}
+ui=fluidPage(
+  fluidRow(
+    column(1,actionButton("upb","Up"))
+  ),
+  fluidRow(
+    column(3,actionButton("dob","Down"),actionButton("leb","Left"),actionButton("rib","Right"))
+  ),
+  fluidRow(
+    column(8,actionButton("stb","Stop"),actionButton("cub","Cursor"),actionButton("unb","Undo"),actionButton("nob","No Action"),actionButton("atb","Attack"),actionButton("a2b","Attack 2"),actionButton("exb","Execute"),actionButton("deb","Deploy")),
+    column(1,selectInput("nam",NULL,progstats[,1],width = "130px"))
+  ),
+  mainPanel(
+    imageOutput("myImage")
+  )
+)
+
+server=function(input,output) {
+  v=reactiveValues(data=NULL)
+  v$vert=6
+  v$horiz=6
+  v$program=0.8
+  v$progtail=matrix(c(NA,NA),nrow=1,ncol=2)
+  v$tailcol=0.8
+  v$ms=ms
+  v$msrem=ms
+  v$attype=""
+  v$attack=c(1,1,0,0)
+  v$attype2=NA
+  v$attack2=c(NA,NA,NA,NA)
+  v$atvert=1
+  v$athoriz=1
+  v$otherprogs=otherprogs
+  v$otherlocs=otherlocs
+  v$otherprogtails=otherprogtails
+  v$othertailcols=othertailcols
+  v$otherms=otherms
+  v$otherattypes=otherattypes
+  v$otherats=otherats
+  v$otherattypes2=otherattypes2
+  v$otherats2=otherats2
+  v$undoloc=c(6,6)
+  v$undotail=progtail
+  v$holes=holes
+  v$cursormode=TRUE
+  v$attackmode=FALSE
+  
+  observeEvent(input$stb,{ #close program
+    stopApp()
+  })
+  
+  observeEvent(input$cub,{ #cursor
+    if (!v$cursormode) {
+      v$cursormode=TRUE
+      v$attackmode=FALSE
+      v$otherprogs=c(v$otherprogs,list(v$program))
+      v$vert=v$undoloc[1]
+      v$horiz=v$undoloc[2]
+      v$progtail=v$undotail
+      v$otherlocs=c(v$otherlocs,list(c(v$vert,v$horiz)))
+      v$otherprogtails=c(v$otherprogtails,list(v$progtail))
+      v$othertailcols=c(v$othertailcols,list(v$tailcol))
+      v$otherms=c(v$otherms,list(v$ms))
+      v$otherattypes=c(v$otherattypes,list(v$attype))
+      v$otherats=c(v$otherats,list(v$attack))
+      v$otherattypes2=c(v$otherattypes2,list(v$attype2))
+      v$otherats2=c(v$otherats2,list(v$attack2))
+      v$program=0.8
+      v$progtail=matrix(c(NA,NA),nrow=1,ncol=2)
+      v$tailcol=0.8
+      v$attype=""
+      v$attack=c(1,1,0,0)
+      v$attype2=NA
+      v$attack2=c(NA,NA,NA,NA)
+    } else if (any(sapply(v$otherlocs,function(x){v$vert==x[1]&v$horiz==x[2]}))) {
+      v$cursormode=FALSE
+      whichprog=which(sapply(v$otherlocs,function(x){v$vert==x[1]&v$horiz==x[2]}))
+      v$program=v$otherprogs[[whichprog]]
+      v$progtail=v$otherprogtails[[whichprog]]
+      v$tailcol=v$othertailcols[[whichprog]]
+      v$ms=v$otherms[[whichprog]]
+      v$msrem=v$ms
+      v$attype=v$otherattypes[[whichprog]]
+      v$attack=v$otherats[[whichprog]]
+      v$attype2=v$otherattypes2[[whichprog]]
+      v$attack2=v$otherats2[[whichprog]]
+      v$undoloc=c(v$vert,v$horiz)
+      v$undotail=v$progtail
+      v$otherprogs=v$otherprogs[-whichprog]
+      v$otherlocs=v$otherlocs[-whichprog]
+      v$otherprogtails=v$otherprogtails[-whichprog]
+      v$othertailcols=v$othertailcols[-whichprog]
+      v$otherms=v$otherms[-whichprog]
+      v$otherattypes=v$otherattypes[-whichprog]
+      v$otherats=v$otherats[-whichprog]
+      v$otherattypes2=v$otherattypes2[-whichprog]
+      v$otherats2=v$otherats2[-whichprog]
+    }
+  })
+  
+  observeEvent(input$upb,{ #up
+    if (v$cursormode&(v$vert-1)>0) {
+      v$vert=v$vert-1
+    } else if (v$attackmode&(v$atvert-1)>0) {
+      v$atvert=v$atvert-1
+    } else {
+      tmplocs=na.omit(do.call(rbind,c(v$otherlocs,v$otherprogtails,list(v$holes))))
+      if (!any((v$vert-1)==tmplocs[,1]&v$horiz==tmplocs[,2])&(v$vert-1)>0&v$msrem>0) {
+        prevvert=v$vert
+        v$vert=v$vert-1
+        v$progtail=tailloc(v$vert,v$horiz,prevvert,v$horiz,v$progtail)
+        v$msrem=v$msrem-1
+      }
+    }
+  })
+  observeEvent(input$dob,{ #down
+    if (v$cursormode&(v$vert+1)<=gridheight) {
+      v$vert=v$vert+1
+    } else if (v$attackmode&(v$atvert+1)<=gridheight) {
+      v$atvert=v$atvert+1
+    } else {
+      tmplocs=na.omit(do.call(rbind,c(v$otherlocs,v$otherprogtails,list(v$holes))))
+      if (!any((v$vert+1)==tmplocs[,1]&v$horiz==tmplocs[,2])&(v$vert+1)<=gridheight&v$msrem>0) {
+        prevvert=v$vert
+        v$vert=v$vert+1
+        v$progtail=tailloc(v$vert,v$horiz,prevvert,v$horiz,v$progtail)
+        v$msrem=v$msrem-1
+      }
+    }
+  })
+  observeEvent(input$leb,{ #left
+    if (v$cursormode&(v$horiz-1)>0) {
+      v$horiz=v$horiz-1
+    } else if (v$attackmode&(v$athoriz-1)>0) {
+      v$athoriz=v$athoriz-1
+    } else {
+      tmplocs=na.omit(do.call(rbind,c(v$otherlocs,v$otherprogtails,list(v$holes))))
+      if (!any(v$vert==tmplocs[,1]&(v$horiz-1)==tmplocs[,2])&(v$horiz-1)>0&v$msrem>0) {
+        prevhoriz=v$horiz
+        v$horiz=v$horiz-1
+        v$progtail=tailloc(v$vert,v$horiz,v$vert,prevhoriz,v$progtail)
+        v$msrem=v$msrem-1
+      }
+    }
+  })
+  observeEvent(input$rib,{ #right
+    if (v$cursormode&(v$horiz+1)<=gridwidth) {
+      v$horiz=v$horiz+1
+    } else if (v$attackmode&(v$athoriz+1)<=gridwidth) {
+      v$athoriz=v$athoriz+1
+    } else {
+      tmplocs=na.omit(do.call(rbind,c(v$otherlocs,v$otherprogtails,list(v$holes))))
+      if (!any(v$vert==tmplocs[,1]&(v$horiz+1)==tmplocs[,2])&(v$horiz+1)<=gridwidth&v$msrem>0) {
+        prevhoriz=v$horiz
+        v$horiz=v$horiz+1
+        v$progtail=tailloc(v$vert,v$horiz,v$vert,prevhoriz,v$progtail)
+        v$msrem=v$msrem-1
+      }
+    }
+  })
+  
+  observeEvent(input$unb,{ #undo
+    if (!v$cursormode) {
+      v$attackmode=FALSE
+      v$vert=v$undoloc[1]
+      v$horiz=v$undoloc[2]
+      v$progtail=v$undotail
+      v$msrem=v$ms
+    }
+  })
+  
+  observeEvent(input$atb,{
+    if (!v$cursormode) {
+      if (!v$attackmode) {
+        v$attackmode=TRUE
+        v$atvert=v$vert
+        v$athoriz=v$horiz
+      } else {
+        v$attackmode=FALSE
+      }
+    }
+  })
+  
+  observeEvent(input$nob,{ #no action
+    if (!v$cursormode) {
+      v$attackmode=FALSE
+      v$cursormode=TRUE
+      v$otherprogs=c(v$otherprogs,list(v$program))
+      v$otherlocs=c(v$otherlocs,list(c(v$vert,v$horiz)))
+      v$otherprogtails=c(v$otherprogtails,list(v$progtail))
+      v$othertailcols=c(v$othertailcols,list(v$tailcol))
+      v$otherms=c(v$otherms,list(v$ms))
+      v$otherattypes=c(v$otherattypes,list(v$attype))
+      v$otherats=c(v$otherats,list(v$attack))
+      v$otherattypes2=c(v$otherattypes2,list(v$attype2))
+      v$otherats2=c(v$otherats2,list(v$attack2))
+      v$program=0.8
+      v$progtail=matrix(c(NA,NA),nrow=1,ncol=2)
+      v$tailcol=0.8
+      v$attype=""
+      v$attack=c(1,1,0,0)
+      v$attype2=NA
+      v$attack2=c(NA,NA,NA,NA)
+    }
+  })
+  
+  observeEvent(input$exb,{ #execute attack
+    targets=na.omit(do.call(rbind,c(v$otherlocs,v$otherprogtails)))
+    if (!v$cursormode&v$attackmode&any(v$atvert==targets[,1]&v$athoriz==targets[,2])) {
+      hit=sapply(1:length(v$otherlocs),function(x){tmp=na.omit(rbind(v$otherlocs[[x]],v$otherprogtails[[x]]));return(any(v$atvert==tmp[,1]&v$athoriz==tmp[,2]))})
+      hit=which(hit)
+      if ((nrow(na.omit(v$otherprogtails[[hit]]))+1)>v$attack[1]) {
+        hp=max(which(!is.na(v$otherprogtails[[hit]][,1])))
+        v$otherprogtails[[hit]][hp:(hp-v$attack[1]+1),]=NA
+      } else {
+        v$otherprogs=v$otherprogs[-hit]
+        v$otherlocs=v$otherlocs[-hit]
+        v$otherprogtails=v$otherprogtails[-hit]
+        v$othertailcols=v$othertailcols[-hit]
+        v$otherms=v$otherms[-hit]
+        v$otherattypes=v$otherattypes[-hit]
+        v$otherats=v$otherats[-hit]
+        v$otherattypes2=v$otherattypes2[-hit]
+        v$otherats2=v$otherats2[-hit]
+      }
+      v$attackmode=FALSE
+      v$cursormode=TRUE
+      v$otherprogs=c(v$otherprogs,list(v$program))
+      v$otherlocs=c(v$otherlocs,list(c(v$vert,v$horiz)))
+      v$otherprogtails=c(v$otherprogtails,list(v$progtail))
+      v$othertailcols=c(v$othertailcols,list(v$tailcol))
+      v$otherms=c(v$otherms,list(v$ms))
+      v$otherattypes=c(v$otherattypes,list(v$attype))
+      v$otherats=c(v$otherats,list(v$attack))
+      v$otherattypes2=c(v$otherattypes2,list(v$attype2))
+      v$otherats2=c(v$otherats2,list(v$attack2))
+      v$program=0.8
+      v$progtail=matrix(c(NA,NA),nrow=1,ncol=2)
+      v$tailcol=0.8
+      v$attype=""
+      v$attack=c(1,1,0,0)
+      v$attype2=NA
+      v$attack2=c(NA,NA,NA,NA)
+    }
+  })
+  
+  observeEvent(input$deb,{
+    blocked=na.omit(do.call(rbind,c(v$otherlocs,v$otherprogtails,list(v$holes))))
+    if (v$cursormode&!v$attackmode&!any((v$vert+1)==blocked[,1]&v$horiz==blocked[,2])) {
+      whichprog=which(input$nam==progstats[,1])
+      v$otherprogs=c(v$otherprogs,progimags[whichprog])
+      v$otherlocs=c(v$otherlocs,list(c(v$vert,v$horiz)))
+      v$otherprogtails=c(v$otherprogtails,list(matrix(NA,ncol=2,nrow=progstats[whichprog,4]-1)))
+      v$othertailcols=c(v$othertailcols,list(progimags[[whichprog]][1,1,]))
+      v$otherms=c(v$otherms,list(progstats[whichprog,3]))
+      v$otherattypes=c(v$otherattypes,list(progstats[whichprog,5]))
+      v$otherats=c(v$otherats,list(as.numeric(progstats[whichprog,c(6:9)])))
+      v$otherattypes2=c(v$otherattypes2,list(progstats[whichprog,10]))
+      v$otherats2=c(v$otherats2,list(as.numeric(progstats[whichprog,c(11:14)])))
+    }
+  })
+  
+  output$myImage=renderImage({
+    outfile=tempfile(fileext = ".png")
+    writePNG(programloc(v$vert,v$horiz,v$progtail,v$program,v$tailcol,v$otherprogs,v$otherlocs,v$otherprogtails,v$othertailcols,v$cursormode,v$msrem,v$holes,v$attackmode,v$attack,v$atvert,v$athoriz),outfile)
+    list(src=outfile,contentType="image/png",width=32*gridwidth+5,height=32*gridheight+5)
+  },deleteFile = TRUE)
+}
+
+shinyApp(ui,server)
+```
