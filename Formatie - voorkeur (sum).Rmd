@@ -7,8 +7,9 @@ output: html_document
 
 basis
 ```{r}
-meerderheid.parl=28 #76
-meerderheid.sen=1 #38
+meerderheid.parl=76 #76
+meerderheid.sen=38 #38
+straf=0
 ```
 
 data lezen
@@ -49,7 +50,53 @@ bestaatal=function(l,vec=tmp) {
 }
 ```
 
-lijst van alle mogelijke kabinetten
+lijst van alle mogelijke kabinetten (parallel)
+#```{r}
+splitvec=function(vec,n) {
+  if (length(vec)<n) {
+    stop("vector not long enough, length:",length(vec))
+  }
+  out=round(seq(0,length(vec),length.out = n+1))
+  return(lapply(2:(n+1),function(y){vec[(out[y-1]+1):out[y]]}))
+}
+kabfunc=function(a,maxsimult2=maxsimult,suffix=numeric(0),verk2=verk,meerd1=meerderheid.parl,meerd2=meerderheid.sen,prev=NULL) {
+  code=as.numeric(intToBits(a))[1:maxsimult2]
+  code=c(code,suffix)
+  if (sum(code)<2) {
+    return(NULL)
+  }
+  code=verk2[,code==1]
+  meerd=rowSums(code)
+  if (meerd[1]<meerd1|meerd[2]<meerd2) {
+    return(NULL)
+  } else {
+    return(colnames(code))
+  }
+}
+library(parallel)
+maxsimult=25
+cores=6
+clu=makeCluster(cores)
+maxsimult=min(36,maxsimult,ncol(verk))
+if (ncol(verk)>maxsimult) {
+  stop("Not yet programmed")
+} else {
+  tmp=1:(2^ncol(verk)-1)
+  tmp=splitvec(tmp,cores)
+  kabinetten=parLapply(clu,tmp,function(x,kabfunc=kabfunc,maxsimult=maxsimult,verk=verk,meerderheid.parl=meerderheid.parl,meerderheid.sen=meerderheid.sen){lapply(x,function(y){kabfunc(y,maxsimult,numeric(0),verk,meerderheid.parl,meerderheid.sen,NULL)})},kabfunc=kabfunc,maxsimult=maxsimult,verk=verk,meerderheid.parl=meerderheid.parl,meerderheid.sen=meerderheid.sen)
+  kabinetten=unlist(kabinetten,recursive = FALSE)
+  kabinetten=kabinetten[-which(sapply(kabinetten,is.null))]
+  tmp=splitvec(1:length(kabinetten),cores)
+  minimal=parSapply(clu,tmp,function(x,kabinetten=kabinetten){sapply(x,function(y){any(sapply(kabinetten[-y],function(z){all(z%in%kabinetten[[y]])}))})},kabinetten=kabinetten)
+  minimal=unlist(minimal,recursive = FALSE)
+  kabinetten=kabinetten[!minimal]
+}
+stopCluster(clu)
+endtime=Sys.time()
+difftime(endtime,starttime)
+#```
+
+lijst van alle mogelijke kabinetten (oud)
 ```{r}
 kabinetn=c(1,1)
 kabinetten=list()
@@ -79,26 +126,25 @@ for (i in 1:totkab) {
 }
 ```
 
-nested functies
+functie
 ```{r}
 keuring=function(p,vec=tmp,mat=voork){
   anderen=vec[which(vec!=p)]
   tmpto=match(anderen,mat[p,])
   return(sum(tmpto))
 }
-kabkeuring=function(l){
-  tmp<<-l
-  result=sapply(tmp,keuring)
-  return(result)
-}
 ```
 
 de keuring
 ```{r}
-score=lapply(kabinetten,kabkeuring)
-score2=sapply(score,sum)
+score=rep(list(NULL),length(kabinetten))
+for (i in 1:length(score)) {
+  score[[i]]=sapply(kabinetten[[i]],keuring,vec=kabinetten[[i]])
+}
+len=sapply(score,length)
+score2=sapply(score,sum)+len*straf
 score2=order(score2)
 kabrang=kabinetten[score2]
 score=score[score2]
-kabrang[1:5]
+kabrang[1:10]
 ```
