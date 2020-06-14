@@ -1,0 +1,23 @@
+---
+title: "folder size"
+author: "Bram van Smoorenburg"
+date: "26 May 2020"
+output: html_document
+---
+
+```{r}
+foldname="C:/Users/bramv/OneDrive/Documents"
+```
+
+```{r}
+foldlist=list.dirs(foldname)
+foldlist2=lapply(foldlist,list.files)
+foldlist3=lapply(foldlist2,function(x){x[x!=gsub(".","",x,fixed = TRUE)]})
+foldlist4=lapply(1:length(foldlist3),function(x){if(length(foldlist3[x])==0){return(0)}else{sapply(paste0(foldlist[[x]],"/",foldlist3[[x]]),file.size)}})
+foldlist4=lapply(foldlist4,unname)
+foldlist5=sapply(foldlist4,sum,na.rm=TRUE)
+out=foldlist[order(foldlist5,decreasing = TRUE)]
+totalsize=sum(foldlist5)
+cumulative=cumsum(sort(foldlist5,decreasing = TRUE)/totalsize)
+out[1:20]
+```

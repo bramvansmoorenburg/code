@@ -1,0 +1,127 @@
+---
+title: "viswijzer"
+author: "Bram van Smoorenburg"
+date: "16 May 2020"
+output: html_document
+---
+
+```{r}
+library(rvest)
+```
+
+https://www.goedevis.nl/zoeken/makreel/
+
+```{r}
+fishname="zalm"
+url=paste0("https://www.goedevis.nl/zoeken/",fishname,"/")
+bla=read_html(url)
+bla2=xml_child(xml_child(xml_child(xml_child(bla, 2), 3), 1), 3)
+bla3=xml_children(bla2)
+bla4=xml_node(bla3,"a")
+bla5=xml_attrs(bla4)
+bla6=sapply(bla5,function(x){x[1]})
+```
+
+next pages
+```{r}
+pagenr=1
+repeat {
+  pagenr=pagenr+1
+  urlnext=paste0("https://www.goedevis.nl/zoeken/",fishname,"/page/",pagenr,"/")
+  blanext=try(read_html(urlnext))
+  if (class(blanext)[1]=="try-error") {
+    break
+  }
+  blanext2=xml_child(xml_child(xml_child(xml_child(blanext, 2), 3), 1), 3)
+blanext3=xml_children(blanext2)
+blanext4=xml_node(blanext3,"a")
+blanext5=xml_attrs(blanext4)
+nextnames=sapply(blanext5,function(x){x[1]})
+bla6=c(bla6,nextnames)
+}
+```
+
+fish function
+```{r}
+fishfunc=function(n) {
+  bl=read_html(n)
+bl2=xml_child(xml_child(xml_child(xml_child(xml_child(bl, 2), 3), 2), 1), 3)
+bl3=xml_children(bl2)
+if (length(bl3)==0) {
+  return(matrix(NA,nrow=17,ncol=1))
+}
+marks=xml_attrs(bl3)
+marks=sapply(marks,function(x){x[3]})
+bl4=lapply(bl3,function(x){html_children(x)[2]})
+bl5=lapply(bl4,html_children)
+
+namemarkseason=lapply(bl5,function(x){x[1]})
+namemarkseason=lapply(namemarkseason,html_children)
+nameseason=lapply(namemarkseason,function(x){x[1]})
+nameseason=lapply(nameseason,xml_children)
+name=sapply(nameseason,xml_text)[-3,]
+season=lapply(nameseason,xml_children)
+season=sapply(season,function(x){sapply(xml_attrs(x),function(y){y[2]})})
+
+origincatch=lapply(bl5,function(x){x[2]})
+origincatch=lapply(origincatch,xml_children)
+origin=lapply(origincatch,function(x){x[1]})
+origin=sapply(origin,xml_text)
+catch=lapply(origincatch,function(x){x[2]})
+catch=lapply(catch,xml_text)
+catch=sapply(catch,function(x){strsplit(x,"Kweek- / Vangstmethode",fixed = TRUE)[[1]][2]})
+
+if (length(marks)>1) {
+  out=rbind(name,marks,origin,catch,season)
+} else {
+  out=rbind(name[1],name[2],marks,origin,catch,season)
+}
+return(out)
+}
+```
+
+```{r}
+result=lapply(bla6,fishfunc)
+result=do.call(cbind,result)
+```
+
+get month number
+```{r}
+monthnum=function(m) {
+  if (m=="January") {
+    return(1)
+  } else if (m=="February") {
+    return(2)
+  } else if (m=="March") {
+    return(3)
+  } else if (m=="April") {
+    return(4)
+  } else if (m=="May") {
+    return(5)
+  } else if (m=="June") {
+    return(6)
+  } else if (m=="July") {
+    return(7)
+  } else if (m=="August") {
+    return(8)
+  } else if (m=="September") {
+    return(9)
+  } else if (m=="October") {
+    return(10)
+  } else if (m=="November") {
+    return(11)
+  } else if (m=="December") {
+    return(12)
+  } else {
+    stop("(monthnum) unknown month, m=",m)
+  }
+}
+```
+
+sustainable fish
+```{r}
+cmonth=monthnum(months(Sys.time()))
+result[1,duplicated(result[1,])|duplicated(result[1,],fromLast=TRUE)]=paste0("*",result[1,duplicated(result[1,])|duplicated(result[1,],fromLast = TRUE)])
+sustainablefish=apply(result,2,function(x){if(all(is.na(x))){return(x)}else if(x[3]=="mark-groen"&x[5+cmonth]=="in-season"){return(x)}else{return(rep(NA,17))}})
+View(sustainablefish)
+```
