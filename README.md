@@ -1,40 +1,40 @@
 # code
 
-15 digits
+##15 digits
 
 
-CVsteppin
+##CVsteppin
 
 
-Formatie - voorkeur (sum)
+##Formatie - voorkeur (sum)
 
 
-installed packages
+##installed packages
 
 
-Tournament
+##Tournament
 
 
-travelling salesman
+##travelling salesman
 
 
-folder size
+##folder size
 
 
-installing packages
+##installing packages
 
 
-parallel computing
+##parallel computing
 
 
-Risk in R
+##Risk in R
 
 
-Risk map
+##Risk map
 
 
-spybots the nightfall incident
+##spybots the nightfall incident
 ![alt text](https://github.com/bramvansmoorenburg/images/blob/master/spybots.png)
 
-viswijzer
+##viswijzer
 
