@@ -1,0 +1,227 @@
+---
+title: "Image Recognizer (binned)"
+author: "Bram van Smoorenburg"
+date: "4 April 2018"
+output: html_document
+---
+
+basics
+```{r}
+binsize=10
+nodes=c(50,50)
+biases=10
+netsource=FALSE
+setBW=TRUE
+set.seed(20180722)
+```
+
+lirbraries
+```{r}
+library(png)
+library(xlsx)
+library(faraway)
+```
+
+reading in images
+```{r}
+homedir=getwd()
+setwd("./training")
+files=list.files()
+if (binsize>length(files)) {
+  binsize=length(files)
+}
+minibatch=sample(length(files))
+batch=1:binsize
+filenum=minibatch[batch]
+img=list()
+for (i in filenum) {
+  img[[length(img)+1]]=readPNG(paste0("./",files[i]))
+}
+if (setBW) {
+  img=lapply(img,function(x){apply(x,c(1,2),mean)})
+}
+img=lapply(img,function(x){matrix(x,ncol = 1)})
+```
+
+reading labels
+```{r}
+label=as.matrix(read.xlsx("./training.labels.xlsx",1,header = FALSE))
+answer=unique(label[,2])
+```
+
+random starting weights
+```{r}
+if (is.logical(netsource)) {
+  weight=rep(list(0),length(nodes)+1)
+  weight[[1]]=matrix(rnorm(prod(dim(img[[1]]),nodes[1])),nodes[1])
+  weight[[length(weight)]]=matrix(rnorm(nodes[length(nodes)]*length(answer)),length(answer))
+  for (a in 2:length(nodes)) {
+  weight[[a]]=matrix(rnorm(nodes[a]*nodes[a-1]),nodes[a])
+  }
+}
+```
+
+random starting biases
+#```{r}
+if (is.logical(netsource)) {
+  bias=rep(list(0),length(nodes)+1)
+  bias[[length(bias)]]=matrix(-rexp(length(answer),1/biases),nrow = length(answer))
+  for (a in 1:length(nodes)) {
+  bias[[a]]=matrix(-rexp(nodes[a],1/biases),nrow=nodes[a])
+  }
+}
+#```
+
+fixed starting biases
+```{r}
+if (is.logical(netsource)) {
+  bias=rep(list(0),length(nodes)+1)
+  bias[[length(bias)]]=matrix(0,nrow = length(answer))
+  for (a in 1:length(nodes)) {
+  bias[[a]]=matrix(0,nrow=nodes[a])
+  }
+}
+```
+
+#the loop
+```{r}
+setwd("./training")
+cat("\n")
+it=0
+costs=numeric(0)
+for (n in 1:100) {
+  it=it+1
+  cat("Iteration: ",it,", ",sep="")
+  
+  activation=rep(list(rep(list(0),length(nodes)+1)),binsize)
+for (i in 1:binsize) {
+  activation[[i]][[1]]=ilogit((weight[[1]]%*%img[[i]])+bias[[1]])
+  for (a in 2:(length(nodes)+1)) {
+    activation[[i]][[a]]=ilogit((weight[[a]]%*%activation[[i]][[a-1]])+bias[[a]])
+  }
+}
+  
+  correct=rep(list(numeric(length(answer))),binsize)
+cost=rep(list(numeric(length(answer))),binsize)
+Dca=rep(list(numeric(length(answer))),binsize)
+z=rep(list(numeric(length(answer))),binsize)
+Daz=rep(list(numeric(length(answer))),binsize)
+Dzw=rep(list(numeric(length(activation[[1]][[length(activation[[1]])-1]]))),binsize)
+for (i in 1:binsize) {
+  correct[[i]][which(answer==label[label[,1]==files[filenum[i]],2])]=1
+  cost[[i]]=(activation[[i]][[length(activation[[i]])]]-correct[[i]])^2
+  Dca[[i]]=2*(activation[[i]][[length(activation[[i]])]]-correct[[i]])
+  z[[i]]=(weight[[length(activation[[i]])]]%*%activation[[i]][[length(activation[[i]])-1]])-bias[[length(activation[[i]])]]
+  Daz[[i]]=exp(z[[i]])/(exp(z[[i]])+1)^2
+  Dzw[[i]]=activation[[i]][[length(activation[[i]])-1]]
+}
+cat("mean cost: ",mean(unlist(cost)),", ",sep="")
+costs[[length(costs)+1]]=mean(unlist(cost))
+
+Dw=rep(list(weight),binsize)
+Db=rep(list(bias),binsize)
+Da=activation
+for (i in 1:binsize) {
+  Da[[i]][[length(Da[[i]])]]=Dca[[i]]
+  Dw[[i]][[length(Dw[[i]])]]=t(vapply(1:length(cost[[i]]),function(x){Dzw[[i]]*Daz[[i]][x]*Dca[[i]][x]},numeric(length(Dzw[[i]]))))
+  Db[[i]][[length(Db[[i]])]]=Daz[[i]]*Dca[[i]]
+}
+for (a in 1:binsize) {
+  for (i in 1:(length(Da[[a]])-2)) {
+    Da[[a]][[length(Da[[a]])-i]]=rowSums(vapply(1:length(Da[[a]][[length(Da[[a]])+1-i]]),function(x){weight[[length(weight)+1-i]][x,]*Daz[[a]][x]*Dca[[a]][x]},numeric(nodes[length(nodes)+1-i])))
+    Dca[[a]]=Da[[a]][[length(Da[[a]])-i]]
+    z[[a]]=(weight[[length(activation[[a]])-i]]%*%activation[[a]][[length(activation[[a]])-1-i]])-bias[[length(activation[[a]])-i]]
+    Daz[[a]]=exp(z[[a]])/(exp(z[[a]])+1)^2
+    Dzw[[a]]=activation[[a]][[length(activation[[a]])-1-i]]
+    Dw[[a]][[length(Dw[[a]])-i]]=t(vapply(1:(length(Da[[a]][[length(Da[[a]])-i]])),function(x){Dzw[[a]]*Daz[[a]][x]*Dca[[a]][x]},numeric(length(Dzw[[a]]))))
+    Db[[a]][[length(Db[[a]])-i]]=Daz[[a]]*Dca[[a]]
+  }
+}
+for (a in 1:binsize) {
+  Da[[a]][[a]]=rowSums(vapply(1:length(Da[[a]][[2]]),function(x){weight[[2]][x,]*Daz[[a]][x]*Dca[[a]][x]},numeric(nodes[1])))
+  Dca[[a]]=Da[[a]][[1]]
+  z[[a]]=(weight[[1]]%*%img[[a]])-bias[[1]]
+  Daz[[a]]=exp(z[[a]])/(exp(z[[a]])+1)^2
+  Dzw[[a]]=img[[a]]
+  Dw[[a]][[1]]=t(vapply(1:(length(Da[[a]][[1]])),function(x){Dzw[[a]]*Daz[[a]][x]*Dca[[a]][x]},numeric(length(Dzw[[a]]))))
+  Db[[a]][[1]]=Daz[[a]]*Dca[[a]]
+}
+
+weightchange=lapply(Dw[[1]],function(x){x/binsize})
+biaschange=lapply(Db[[1]],function(x){x/binsize})
+if (binsize>1) {
+  for (i in 2:binsize) {
+  weightchange=lapply(1:length(weightchange),function(x){weightchange[[x]]+Dw[[i]][[x]]/binsize})
+  biaschange=lapply(1:length(biaschange),function(x){biaschange[[x]]+Db[[i]][[x]]/binsize})
+}
+}
+weight=lapply(1:length(weight),function(x){weight[[x]]-weightchange[[x]]})
+bias=lapply(1:length(bias),function(x){bias[[x]]-biaschange[[x]]})
+cat("adjustment complete.","\n")
+
+if (binsize!=length(files)) {
+  batch=(batch+binsize)%%length(files)
+  if (any(batch==0)) {
+    batch[which(batch==0):length(batch)]=batch[which(batch==0):length(batch)]+1
+  }
+  filenum=minibatch[batch]
+  img=list()
+  for (i in filenum) {
+  img[[length(img)+1]]=readPNG(paste0("./",files[i]))
+}
+if (setBW) {
+  img=lapply(img,function(x){apply(x,c(1,2),mean)})
+}
+img=lapply(img,function(x){matrix(x,ncol = 1)})
+}
+}
+```
+
+```{r}
+plot(costs);abline(reg = lm(costs~c(1:length(costs))))
+```
+
+running again
+```{r}
+activation2=rep(list(rep(list(0),length(nodes)+1)),binsize)
+for (i in 1:binsize) {
+  activation2[[i]][[1]]=ilogit((weight[[1]]%*%img[[i]])+bias[[1]])
+  for (a in 2:(length(nodes)+1)) {
+    activation2[[i]][[a]]=ilogit((weight[[a]]%*%activation2[[i]][[a-1]])+bias[[a]])
+  }
+}
+cost2=rep(list(numeric(length(answer))),binsize)
+for (i in 1:binsize) {
+  cost2[[i]]=(activation2[[i]][[length(activation2[[i]])]]-correct[[i]])^2
+}
+answers=lapply(activation2,function(x){x[[length(x)]]})
+mean(unlist(cost2))
+```
+
+saving
+```{r}
+foldername="./Image recognizer 200x200 BW 0,007"
+dir.create(foldername)
+setwd(foldername)
+if (ncol(weight[[1]])>16383&ncol(weight[[1]]<=1048576)) {
+  write.csv(c(length(weight),"t"),"./1lengths.csv")
+  write.csv(t(weight[[1]]),paste0("./w",1,".csv"))
+  for (i in 2:length(weight)) {
+  write.csv(weight[[i]],paste0("./w",i,".csv"))
+}
+for (i in 1:length(bias)) {
+  write.csv(bias[[i]],paste0("./b",i,".csv"))
+}
+} else if (ncol(weight[[1]]>1048576)) {
+  stop("Image too big. Please change this code.")
+} else {
+  write.csv(length(weight),"./1lengths.csv")
+  for (i in 1:length(weight)) {
+  write.csv(weight[[i]],paste0("./w",i,".csv"))
+}
+for (i in 1:length(bias)) {
+  write.csv(bias[[i]],paste0("./b",i,".csv"))
+}
+}
+gc()
+```
