@@ -359,8 +359,9 @@ sumult=function(x1,x2,maxdigs=40,chunks=NULL) {
 ```
 
 ```{r}
-b=sufor(12345)
-c=sufor(4.5678)
-sumult(b,c)
+b=sufor(12345,chunks = 2)
+c=sufor(4.5678,chunks = 2)
+d=sufor(2*10^20,chunks = 2)
+e=sumult(b,c,chunks = 2)
+(f=suadd(cbind(d,e),chunks = 2))
 ```
-
