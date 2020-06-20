@@ -123,5 +123,6 @@ sustainable fish
 cmonth=monthnum(months(Sys.time()))
 result[1,duplicated(result[1,])|duplicated(result[1,],fromLast=TRUE)]=paste0("*",result[1,duplicated(result[1,])|duplicated(result[1,],fromLast = TRUE)])
 sustainablefish=apply(result,2,function(x){if(all(is.na(x))){return(x)}else if(x[3]=="mark-groen"&x[5+cmonth]=="in-season"){return(x)}else{return(rep(NA,17))}})
-View(sustainablefish)
+View(result)
+#View(sustainablefish)
 ```
