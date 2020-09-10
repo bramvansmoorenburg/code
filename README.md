@@ -24,6 +24,9 @@ a series of experimental simulations to determine which type of competition can 
 set of experimental simulations to determine which path a travelling salesman should take if he wants to take the least amount of time to reach a number of cities. uses package ggplot to draw graphs of the path.
 ![alt text](https://github.com/bramvansmoorenburg/images/blob/master/travelling%20salesman.png)
 
+##  automatic text generation
+text mining from a large txt file. this program creates a dictionary with common letter combinations found in the txt file, then uses this dictionary to automatically generate new text similar to the original file. is not very useful but quite funny.
+
 ##  folder size
 program which can determine which sub-folders in a particular folder take up the most memory space.
 
