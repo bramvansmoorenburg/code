@@ -1,0 +1,249 @@
+---
+title: "dictionary"
+author: "Bram van Smoorenburg"
+date: "7 September 2020"
+output: html_document
+---
+
+```{r}
+library(parallel)
+cores=6
+dicsource=FALSE #use name opf source file as character, or else type FALSE
+dictionary=c(" ",letters)
+```
+
+```{r}
+bla=read.delim("test.txt",header = FALSE,stringsAsFactors = FALSE)
+bla=unname(unlist(bla))
+bla=tolower(bla)
+bla2=unlist(strsplit(bla,"",FALSE))
+bla3=bla2[bla2%in%dictionary]
+table(bla3)
+```
+
+split vector function
+```{r}
+splitvec=function(vec,n) {
+  if (length(vec)<n) {
+    stop("(splitvec) vector not long enough, length:",length(vec),"needed",n)
+  }
+  out=round(seq(0,length(vec),length.out = n+1))
+  return(lapply(2:(n+1),function(y){vec[(out[y-1]+1):out[y]]}))
+}
+```
+
+initialize
+```{r}
+dictionary=dictionary[dictionary%in%bla3]
+origdictionary=dictionary
+if (isFALSE(dicsource)) {
+  occurences=numeric(0)
+  descendents=rep(list(NULL),length(dictionary))
+  descendmarker=numeric(0)
+} else {
+  readdat=xlsx::read.xlsx(dicsource,1,stringsAsFactors=FALSE)
+  dictionary=c(dictionary,readdat[,1])
+  occurences=readdat[,2]
+  descendents=rep(list(NULL),length(dictionary))
+  descendmarker=readdat[,3]
+  for (i in 1:length(descendmarker)) {
+    descendents[[descendmarker[i]]]=c(descendents[[descendmarker[i]]],i+length(origdictionary))
+  }
+  dic2=as.matrix(xlsx::read.xlsx(dicsource,2))
+  rownames(dic2)=colnames(dic2)=dictionary[-length(dictionary)]
+}
+```
+
+loop
+```{r}
+clu=makeCluster(cores)
+
+if (isFALSE(dicsource)) {
+  dic2=matrix(nrow=length(dictionary),ncol=length(dictionary))
+rownames(dic2)=colnames(dic2)=dictionary
+  for (i in 1:length(dictionary)) {
+  cat(dictionary[i],",",sep = "")
+  spldic=splitvec(1:length(dictionary),cores)
+  out=parLapply(clu,spldic,function(x,bl=bla3,dic=dictionary,let=i){
+    sapply(x,function(y){
+      tmp=c(dic[let],dic[y]);
+      tmp=unlist(strsplit(tmp,""))
+      return(sum(sapply(1:(length(bl)-length(tmp)+1),function(z){all(bl[z:(z+length(tmp)-1)]==tmp)})))
+    })
+  },bl=bla3,dic=dictionary,let=i)
+  out=do.call(c,out)
+  dic2[i,]=out
+}
+banned=sapply(dictionary,function(x){sapply(dictionary,function(y){paste0(y,x,collapse = "")})})
+  banned2=apply(banned,c(1,2),function(x){x%in%dictionary})
+  dic2[banned2]=0
+blmax=which(dic2==max(dic2),arr.ind = TRUE)
+blmax=blmax[which.max(blmax[,1]),]
+occurences=c(occurences,max(dic2))
+dictionary=c(dictionary,paste0(dictionary[c(blmax[1],blmax[2])],collapse=""))
+descendents[[blmax[1]]]=c(descendents[[blmax[1]]],length(dictionary))
+descendmarker=c(descendmarker,blmax[1])
+cat(paste0(dictionary[c(blmax[1],blmax[2])],collapse=""),",",sep = "")
+}
+
+repeat {
+  if (length(dictionary)/50==floor(length(dictionary)/50)) {
+    cat(length(dictionary),",",rev(occurences)[1],",",sep = "")
+  }
+  spldic=splitvec(1:(length(dictionary)-1),cores)
+  out=parLapply(clu,spldic,function(x,bl=bla3,dic=dictionary,let=rev(dictionary)[1]){
+    sapply(x,function(y){
+      tmp=c(let,dic[y]);
+      tmp=unlist(strsplit(tmp,""))
+      return(sum(sapply(1:(length(bl)-length(tmp)+1),function(z){all(bl[z:(z+length(tmp)-1)]==tmp)})))
+    })
+  },bl=bla3,dic=dictionary,let=rev(dictionary)[1])
+  out=do.call(c,out)
+  spldic=splitvec(1:length(dictionary),cores)
+  out2=parLapply(clu,spldic,function(x,bl=bla3,dic=dictionary,let=rev(dictionary)[1]){
+    sapply(x,function(y){
+      tmp=c(dic[y],let);
+      tmp=unlist(strsplit(tmp,""))
+      return(sum(sapply(1:(length(bl)-length(tmp)+1),function(z){all(bl[z:(z+length(tmp)-1)]==tmp)})))
+    })
+  },bl=bla3,dic=dictionary,let=rev(dictionary)[1])
+  out2=do.call(c,out2)
+  dic2=rbind(dic2,out)
+  dic2=cbind(dic2,out2)
+  banned=sapply(dictionary,function(x){sapply(dictionary,function(y){paste0(y,x,collapse = "")})})
+  banned2=apply(banned,c(1,2),function(x){x%in%dictionary})
+  dic2[banned2]=0
+  blmax=which(dic2==max(dic2),arr.ind = TRUE)
+  blmax=blmax[which.max(blmax[,1]),]
+  occurences=c(occurences,max(dic2))
+  dictionary=c(dictionary,paste0(dictionary[c(blmax[1],blmax[2])],collapse=""))
+  if (blmax[1]>length(descendents)) {
+    descendents[[blmax[1]]]=length(dictionary)
+  } else {
+    descendents[[blmax[1]]]=c(descendents[[blmax[1]]],length(dictionary))
+  }
+  descendmarker=c(descendmarker,blmax[1])
+  cat(paste0(dictionary[c(blmax[1],blmax[2])],collapse=""),",",sep = "")
+}
+```
+
+search for a phrase
+```{r}
+keyphrase="oekrane"
+keyphrase2=strsplit(keyphrase,"")[[1]]
+phrasematch=sapply(1:(length(bla3)-length(keyphrase2)+1),function(z){all(bla3[z:(z+length(keyphrase2)-1)]==keyphrase2)})
+if (!any(phrasematch)) {
+  stop("phrase not found")
+}
+phrasematch=which(phrasematch)
+length(phrasematch)
+for (ab in phrasematch[1:min(10,length(phrasematch))]) {
+  print(bla3[(ab-10):(ab+10)])
+}
+```
+
+bigrams
+#```{r}
+bigrams=matrix(nrow=length(dictionary),ncol=length(dictionary))
+  rownames(bigrams)=colnames(bigrams)=dictionary
+  
+  for (i in 1:length(dictionary)) {
+    cat(dictionary[i]," ",sep = "")
+    spldic=splitvec(1:length(dictionary),cores)
+    out=parLapply(clu,spldic,function(x,bl=bla3,dic=dictionary,let=i){
+      sapply(x,function(y){
+        tmp=c(dic[let],dic[y]);
+        tmp=unlist(strsplit(tmp,""))
+        return(sum(sapply(1:(length(bl)-length(tmp)+1),function(z){all(bl[z:(z+length(tmp)-1)]==tmp)})))
+      })
+    },bl=bla3,dic=dictionary,let=i)
+    out=do.call(c,out)
+    bigrams[i,]=out
+  }
+  bigrams2=sapply(dictionary,function(x){sapply(dictionary,function(y){paste0(y,x,collapse = "")})})[bigrams>0]
+  bignames=rep(dictionary,each=length(dictionary))[bigrams>0]
+#```
+
+trigrams
+#```{r}
+trigrams=matrix(nrow=length(bigrams2),ncol=length(dictionary))
+  rownames(trigrams)=bigrams2
+  colnames(trigrams)=dictionary
+  for (i in 1:length(dictionary)) {
+    cat(dictionary[i]," ",sep = "")
+    spldic=splitvec(1:length(bigrams2),cores)
+    out=parLapply(clu,spldic,function(x,bl=bla3,dic=dictionary,dicto=bigrams2,let=i){
+      sapply(x,function(y){
+        tmp=c(dicto[y],dic[let]);
+        tmp=unlist(strsplit(tmp,""))
+        return(sum(sapply(1:(length(bl)-length(tmp)+1),function(z){all(bl[z:(z+length(tmp)-1)]==tmp)})))
+      })
+    },bl=bla3,dic=dictionary,dicto=bigrams2,let=i)
+    out=do.call(c,out)
+    trigrams[,i]=out
+  }
+#```
+
+text generation
+#```{r}
+ctext=c("he","t")
+cat(ctext,sep = "")
+for (ab in 1:100) {
+  tmp=paste0(rev(ctext)[2:1],collapse = "")
+  tmp=which(bigrams2==tmp)
+  tmp=dictionary[which.max(trigrams[tmp,])]
+  ctext=c(ctext,tmp)
+  cat(tmp)
+}
+#```
+
+dynamically generated n-grams
+```{r}
+set.seed(20200908)
+starttext=c("met e")
+starttext=strsplit(starttext,"")[[1]]
+ctext=starttext
+cat(ctext,sep = "")
+spldic=splitvec(1:length(dictionary),cores)
+for (ab in 1:100) {
+  i=rev(ctext)[length(starttext):1]
+  for (abc in 1:2) {
+    out=parLapply(clu,spldic,function(x,bl=bla3,dic=dictionary,let=i){
+      sapply(x,function(y){
+        tmp=c(let,dic[y]);
+        tmp=unlist(strsplit(tmp,""))
+        return(sum(sapply(1:(length(bl)-length(tmp)+1),function(z){all(bl[z:(z+length(tmp)-1)]==tmp)})))
+      })
+    },bl=bla3,dic=dictionary,let=i)
+  }
+    out=do.call(c,out)
+    for (abc in 1:length(out)) {
+      if (out[abc]>0&&length(descendents)>=abc) {
+        if (length(descendents[[abc]])>0) {
+          out[abc]=out[abc]-sum(out[descendents[[abc]]])
+        }
+      }
+    }
+    cnext=sample(dictionary,1,prob = out)
+    ctext=c(ctext,cnext)
+    cat(cnext)
+}
+```
+
+save data
+```{r}
+library(openxlsx)
+savedata=data.frame(dictionary=dictionary[-(1:length(origdictionary))],occurences,descendmarker)
+rownames(dic2)=colnames(dic2)=dictionary[-length(dictionary)]
+workb=createWorkbook()
+addWorksheet(workb,"dictionary")
+addWorksheet(workb,"full table")
+writeData(workb,1,savedata)
+writeData(workb,2,dic2)
+saveWorkbook(workb,"dictionary.xlsx")
+```
+
+```{r}
+stopCluster(clu)
+gc()
+```
